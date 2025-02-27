@@ -18,3 +18,5 @@ rustls = { path = "../rustls", features = ["logging"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 webpki-roots = { workspace = true }
+rustls-libjade-provider = { path = "../rustls-libjade-provider" }
+rustls-agent-provider = { path = "../rustls-agent-provider" }

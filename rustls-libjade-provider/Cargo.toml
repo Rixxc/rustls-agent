@@ -1,0 +1,9 @@
+[package]
+name = "rustls-libjade-provider"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rustls = { path = "../rustls" }
+aws-lc-rs = { workspace = true }
+webpki = { workspace = true }

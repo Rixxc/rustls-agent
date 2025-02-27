@@ -1,0 +1,10 @@
+[package]
+name = "rustls-agent-provider"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rustls = { path = "../rustls" }
+aws-lc-rs = { workspace = true }
+webpki = { workspace = true }
+agent_lib = { path = "../../agent_lib" }
