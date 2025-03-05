@@ -12,7 +12,6 @@ use webpki::aws_lc_rs as webpki_algs;
 
 #[link(name = "jade")]
 extern "C" {
-    fn jade_ed25519_amd64_sign(sk: *const [u8; 64], m: *const u8, mlen: u64, sig: *mut [u8; 64]);
     fn jade_ed25519_amd64_pubkey(sk: *const [u8; 32], pk: *mut [u8; 32]);
 }
 

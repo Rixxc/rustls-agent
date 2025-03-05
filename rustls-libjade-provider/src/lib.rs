@@ -1,8 +1,5 @@
 use rustls::{
-    crypto::{
-        aws_lc_rs::{self, cipher_suite},
-        CryptoProvider, KeyProvider, WebPkiSupportedAlgorithms,
-    },
+    crypto::{aws_lc_rs, CryptoProvider, KeyProvider, WebPkiSupportedAlgorithms},
     sign::{Signer, SigningKey},
     SignatureAlgorithm, SignatureScheme, SupportedCipherSuite,
 };
@@ -15,8 +12,7 @@ extern "C" {
     fn jade_ed25519_amd64_pubkey(sk: *const [u8; 32], pk: *mut [u8; 32]);
 }
 
-pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] =
-    &[cipher_suite::TLS13_CHACHA20_POLY1305_SHA256];
+pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = aws_lc_rs::DEFAULT_CIPHER_SUITES;
 
 pub static SIGNATURE_SCHEMES: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[webpki_algs::ED25519],

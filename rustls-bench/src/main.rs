@@ -926,6 +926,10 @@ impl ResumptionParam {
 
 #[derive(Copy, Clone, Debug, PartialEq, ValueEnum)]
 enum Provider {
+    #[cfg(feature = "agent")]
+    Agent,
+    #[cfg(feature = "libjade")]
+    Libjade,
     #[cfg(feature = "aws-lc-rs")]
     AwsLcRs,
     #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
@@ -941,6 +945,10 @@ enum Provider {
 impl Provider {
     fn build(self) -> CryptoProvider {
         match self {
+            #[cfg(feature = "agent")]
+            Self::Agent => rustls_agent_provider::default_provider(),
+            #[cfg(feature = "libjade")]
+            Self::Libjade => rustls_libjade_provider::default_provider(),
             #[cfg(feature = "aws-lc-rs")]
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::default_provider(),
             #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
@@ -955,6 +963,10 @@ impl Provider {
 
     fn ticketer(self) -> Result<Arc<dyn ProducesTickets>, Error> {
         match self {
+            #[cfg(feature = "agent")]
+            Self::Agent => rustls::crypto::aws_lc_rs::Ticketer::new(),
+            #[cfg(feature = "libjade")]
+            Self::Libjade => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(feature = "aws-lc-rs")]
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
@@ -990,6 +1002,12 @@ impl Provider {
     fn choose_default() -> Self {
         #[allow(unused_mut)]
         let mut available = vec![];
+
+        #[cfg(feature = "agent")]
+        available.push(Self::Agent);
+
+        #[cfg(feature = "libjade")]
+        available.push(Self::Libjade);
 
         #[cfg(feature = "aws-lc-rs")]
         available.push(Self::AwsLcRs);
@@ -1443,71 +1461,71 @@ fn duration_nanos(d: Duration) -> f64 {
 }
 
 static ALL_BENCHMARKS: &[BenchmarkParam] = &[
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS12,
-    ),
-    BenchmarkParam::new(
-        KeyType::EcdsaP256,
-        CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS12,
-    ),
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        &rustls::version::TLS12,
-    ),
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-        &rustls::version::TLS12,
-    ),
-    BenchmarkParam::new(
-        KeyType::EcdsaP256,
-        CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-        &rustls::version::TLS12,
-    ),
-    BenchmarkParam::new(
-        KeyType::EcdsaP384,
-        CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-        &rustls::version::TLS12,
-    ),
-    BenchmarkParam::new(
-        KeyType::Ed25519,
-        CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-        &rustls::version::TLS12,
-    ),
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS13,
-    ),
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        CipherSuite::TLS13_AES_256_GCM_SHA384,
-        &rustls::version::TLS13,
-    ),
-    BenchmarkParam::new(
-        KeyType::EcdsaP256,
-        CipherSuite::TLS13_AES_256_GCM_SHA384,
-        &rustls::version::TLS13,
-    ),
-    BenchmarkParam::new(
-        KeyType::Ed25519,
-        CipherSuite::TLS13_AES_256_GCM_SHA384,
-        &rustls::version::TLS13,
-    ),
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        CipherSuite::TLS13_AES_128_GCM_SHA256,
-        &rustls::version::TLS13,
-    ),
-    BenchmarkParam::new(
-        KeyType::EcdsaP256,
-        CipherSuite::TLS13_AES_128_GCM_SHA256,
-        &rustls::version::TLS13,
-    ),
+    // BenchmarkParam::new(
+    //     KeyType::Rsa2048,
+    //     CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    //     &rustls::version::TLS12,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::EcdsaP256,
+    //     CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    //     &rustls::version::TLS12,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::Rsa2048,
+    //     CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+    //     &rustls::version::TLS12,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::Rsa2048,
+    //     CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+    //     &rustls::version::TLS12,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::EcdsaP256,
+    //     CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    //     &rustls::version::TLS12,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::EcdsaP384,
+    //     CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    //     &rustls::version::TLS12,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::Ed25519,
+    //     CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    //     &rustls::version::TLS12,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::Rsa2048,
+    //     CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+    //     &rustls::version::TLS13,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::Rsa2048,
+    //     CipherSuite::TLS13_AES_256_GCM_SHA384,
+    //     &rustls::version::TLS13,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::EcdsaP256,
+    //     CipherSuite::TLS13_AES_256_GCM_SHA384,
+    //     &rustls::version::TLS13,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::Ed25519,
+    //     CipherSuite::TLS13_AES_256_GCM_SHA384,
+    //     &rustls::version::TLS13,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::Rsa2048,
+    //     CipherSuite::TLS13_AES_128_GCM_SHA256,
+    //     &rustls::version::TLS13,
+    // ),
+    // BenchmarkParam::new(
+    //     KeyType::EcdsaP256,
+    //     CipherSuite::TLS13_AES_128_GCM_SHA256,
+    //     &rustls::version::TLS13,
+    // ),
     BenchmarkParam::new(
         KeyType::Ed25519,
         CipherSuite::TLS13_AES_128_GCM_SHA256,

@@ -7,6 +7,8 @@ edition = "2021"
 clap = { workspace = true }
 rustls = { path = "../rustls" }
 rustls-post-quantum = { path = "../rustls-post-quantum", optional = true }
+rustls-libjade-provider = { path = "../rustls-libjade-provider", optional = true }
+rustls-agent-provider = { path = "../rustls-agent-provider", optional = true }
 
 [features]
 default = []
@@ -14,6 +16,8 @@ aws-lc-rs = ["rustls/aws-lc-rs"]
 fips = ["rustls/fips", "aws-lc-rs"]
 post-quantum = ["dep:rustls-post-quantum"]
 ring = ["rustls/ring"]
+libjade = ["dep:rustls-libjade-provider"]
+agent = ["dep:rustls-agent-provider"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { workspace = true }
