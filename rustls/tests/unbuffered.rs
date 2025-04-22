@@ -1,8 +1,9 @@
-#![allow(clippy::duplicate_mod)]
+#![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use std::num::NonZeroUsize;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
+use rustls::crypto::CryptoProvider;
 use rustls::server::{ServerConnectionData, UnbufferedServerConnection};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, ReadTraffic,
@@ -10,13 +11,15 @@ use rustls::unbuffered::{
 };
 use rustls::version::TLS13;
 use rustls::{
-    AlertDescription, CertificateError, ClientConfig, Error, InvalidMessage, ServerConfig, SideData,
+    AlertDescription, CertificateError, ClientConfig, ConnectionTrafficSecrets, Error,
+    InvalidMessage, ServerConfig, SideData,
 };
 
 use super::*;
 
 mod common;
 use common::*;
+use provider::cipher_suite;
 
 const MAX_ITERATIONS: usize = 100;
 
@@ -144,9 +147,11 @@ fn app_data_client_to_server() {
             &mut NO_ACTIONS.clone(),
         );
 
-        assert!(client_actions
-            .app_data_to_send
-            .is_none());
+        assert!(
+            client_actions
+                .app_data_to_send
+                .is_none()
+        );
         assert_eq!(
             [expected],
             outcome
@@ -176,9 +181,11 @@ fn app_data_server_to_client() {
             &mut server_actions,
         );
 
-        assert!(server_actions
-            .app_data_to_send
-            .is_none());
+        assert!(
+            server_actions
+                .app_data_to_send
+                .is_none()
+        );
         assert_eq!(
             [expected],
             outcome
@@ -250,9 +257,11 @@ fn early_data() {
             "WriteTraffic"
         ]
     );
-    assert!(client_actions
-        .early_data_to_send
-        .is_none());
+    assert!(
+        client_actions
+            .early_data_to_send
+            .is_none()
+    );
     assert_eq!(
         [expected],
         outcome
@@ -523,11 +532,13 @@ fn junk_after_close_notify_received() {
     let mut server = outcome.server.take().unwrap();
 
     let mut client_send_buf = [0u8; 128];
-    let mut len = dbg!(write_traffic(
-        client.process_tls_records(&mut []),
-        |mut wt: WriteTraffic<_>| wt.queue_close_notify(&mut client_send_buf),
-    )
-    .unwrap());
+    let mut len = dbg!(
+        write_traffic(
+            client.process_tls_records(&mut []),
+            |mut wt: WriteTraffic<_>| wt.queue_close_notify(&mut client_send_buf),
+        )
+        .unwrap()
+    );
 
     client_send_buf[len..len + 4].copy_from_slice(&[0x17, 0x03, 0x03, 0x01]);
     len += 4;
@@ -906,6 +917,53 @@ fn rejects_junk() {
         ]
     );
     confirm_transmit_tls_data(server.process_tls_records(&mut []));
+}
+
+#[test]
+fn read_traffic_not_consumed_too_early() {
+    let mut outcome = handshake(&rustls::version::TLS13);
+    let mut client = outcome.client.take().unwrap();
+    let mut server = outcome.server.take().unwrap();
+
+    let mut client_to_server_buf = Buffer::default();
+    write_traffic(client.process_tls_records(&mut []), |mut wt| {
+        encrypt(&mut wt, b"hello", &mut client_to_server_buf)
+    });
+
+    // if we just peek, we are presented the same data again
+    let (_, discard) = read_traffic(
+        server.process_tls_records(client_to_server_buf.filled()),
+        |rt| assert_eq!(rt.peek_len(), NonZeroUsize::new(5)),
+    );
+    assert!(discard > 0);
+    client_to_server_buf.discard(discard);
+
+    // ditto
+    let (_, discard) = read_traffic(
+        server.process_tls_records(client_to_server_buf.filled()),
+        |rt| assert_eq!(rt.peek_len(), NonZeroUsize::new(5)),
+    );
+    assert_eq!(discard, 0);
+
+    // now consume
+    let (data, discard) = read_traffic(
+        server.process_tls_records(client_to_server_buf.filled()),
+        |mut rt| {
+            rt.next_record()
+                .unwrap()
+                .unwrap()
+                .payload
+                .to_vec()
+        },
+    );
+    assert_eq!(discard, 0);
+    assert_eq!(data, b"hello");
+
+    // server is now idle
+    write_traffic(
+        server.process_tls_records(client_to_server_buf.filled()),
+        |_| (),
+    );
 }
 
 fn write_traffic<T: SideData, R, F: FnMut(WriteTraffic<T>) -> R>(
@@ -1409,6 +1467,96 @@ fn server_receives_incorrect_first_handshake_message() {
         }
         _ => panic!("unexpected alert sending state"),
     };
+}
+
+/// Test that secrets can be extracted and used for encryption/decryption.
+#[test]
+fn test_secret_extraction_enabled() {
+    // Normally, secret extraction would be used to configure kTLS (TLS offload
+    // to the kernel). We want this test to run on any platform, though, so
+    // instead we just compare secrets for equality.
+
+    // TLS 1.2 and 1.3 have different mechanisms for key exchange and handshake,
+    // and secrets are stored/extracted differently, so we want to test them both.
+    // We support 3 different AEAD algorithms (AES-128-GCM mode, AES-256-GCM, and
+    // Chacha20Poly1305), so that's 2*3 = 6 combinations to test.
+    let kt = KeyType::Rsa2048;
+    for suite in [
+        cipher_suite::TLS13_AES_128_GCM_SHA256,
+        cipher_suite::TLS13_AES_256_GCM_SHA384,
+        #[cfg(not(feature = "fips"))]
+        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        #[cfg(not(feature = "fips"))]
+        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    ] {
+        let version = suite.version();
+        println!("Testing suite {:?}", suite.suite().as_str());
+
+        // Only offer the cipher suite (and protocol version) that we're testing
+        let mut server_config = ServerConfig::builder_with_provider(
+            CryptoProvider {
+                cipher_suites: vec![suite],
+                ..provider::default_provider()
+            }
+            .into(),
+        )
+        .with_protocol_versions(&[version])
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(kt.get_chain(), kt.get_key())
+        .unwrap();
+        // Opt into secret extraction from both sides
+        server_config.enable_secret_extraction = true;
+        let server_config = Arc::new(server_config);
+
+        let mut client_config = make_client_config(kt);
+        client_config.enable_secret_extraction = true;
+
+        let mut outcome = run(
+            Arc::new(client_config),
+            &mut NO_ACTIONS.clone(),
+            server_config.clone(),
+            &mut NO_ACTIONS.clone(),
+        );
+
+        let client = outcome.client.take().unwrap();
+        let server = outcome.server.take().unwrap();
+
+        // The handshake is finished, we're now able to extract traffic secrets
+        let client_secrets = client
+            .dangerous_extract_secrets()
+            .unwrap();
+        let server_secrets = server
+            .dangerous_extract_secrets()
+            .unwrap();
+
+        // Comparing secrets for equality is something you should never have to
+        // do in production code, so ConnectionTrafficSecrets doesn't implement
+        // PartialEq/Eq on purpose. Instead, we have to get creative.
+        fn explode_secrets(s: &ConnectionTrafficSecrets) -> (&[u8], &[u8]) {
+            match s {
+                ConnectionTrafficSecrets::Aes128Gcm { key, iv } => (key.as_ref(), iv.as_ref()),
+                ConnectionTrafficSecrets::Aes256Gcm { key, iv } => (key.as_ref(), iv.as_ref()),
+                ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => {
+                    (key.as_ref(), iv.as_ref())
+                }
+                _ => panic!("unexpected secret type"),
+            }
+        }
+
+        fn assert_secrets_equal(
+            (l_seq, l_sec): (u64, ConnectionTrafficSecrets),
+            (r_seq, r_sec): (u64, ConnectionTrafficSecrets),
+        ) {
+            assert_eq!(l_seq, r_seq);
+            assert_eq!(explode_secrets(&l_sec), explode_secrets(&r_sec));
+        }
+
+        assert_secrets_equal(client_secrets.tx, server_secrets.rx);
+        assert_secrets_equal(client_secrets.rx, server_secrets.tx);
+    }
 }
 
 const TLS12_CLIENT_TRANSCRIPT: &[&str] = &[
