@@ -1,11 +1,12 @@
-use agent_lib::{ed25519::Ed25519PrivKey, SharedPtr};
+use agent_lib::{SharedPtr, ed25519::Ed25519PrivKey};
+pub use rustls::crypto::aws_lc_rs::cipher_suite;
 use rustls::{
+    SignatureAlgorithm, SignatureScheme, SupportedCipherSuite,
     crypto::{
-        aws_lc_rs::{self, cipher_suite},
         CryptoProvider, KeyProvider, WebPkiSupportedAlgorithms,
+        aws_lc_rs::{self},
     },
     sign::{Signer, SigningKey},
-    SignatureAlgorithm, SignatureScheme, SupportedCipherSuite,
 };
 use std::{env, fs::File, io::Write, sync::Arc};
 use webpki::aws_lc_rs as webpki_algs;
